@@ -607,7 +607,7 @@ async function openUserPanel() {
   
   if (!fleetList) return;
 
-  fleetList.style.cssText = "max-height: 70vh; overflow-y: auto; overflow-x: hidden; padding-right: 8px;";
+  fleetList.style.cssText = "display: flex; flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: 20px; padding: 15px 5px 25px 5px; width: 100%; scroll-snap-type: x mandatory;";
   fleetList.innerHTML = "<div style='text-align:center; padding: 20px; color: var(--secondary);'>Carregando dados da sua van...</div>";
   panelModal.classList.remove("hidden");
   document.getElementById("overlay").classList.add("active");
