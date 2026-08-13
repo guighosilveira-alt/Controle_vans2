@@ -4,8 +4,7 @@ import {
   doc, 
   getDoc, 
   setDoc, 
-  onSnapshot, 
-  updateDoc 
+  onSnapshot 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // ==========================================
@@ -33,7 +32,9 @@ let currentVanData = {
   collaborators: []
 };
 
-let isAuthenticatedForEdit = false;
+// Sessão global de admin: se true, não pede senha novamente nesta sessão do navegador
+let isGlobalAdminAuthenticated = sessionStorage.getItem('bourbon_admin_auth') === 'true';
+
 let unsubscribeVanListener = null;
 let loggedUserRegistration = localStorage.getItem('bourbon_logged_user') || null;
 
@@ -50,7 +51,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initVanButtons();
   initFormListeners();
 
-  // Verifica se já existe usuário logado localmente
   if (loggedUserRegistration) {
     checkAutoLogin();
   }
@@ -87,6 +87,7 @@ function initNavigation() {
   const overlay = document.getElementById("overlay");
   const backHomeBtn = document.getElementById("back-home-btn");
   const userLoginTriggerBtn = document.getElementById("user-login-trigger-btn");
+  const exitBtn = document.getElementById("exit-btn");
 
   const openMenu = () => { sideMenu.classList.add("open"); overlay.classList.add("active"); };
   const closeMenu = () => { sideMenu.classList.remove("open"); overlay.classList.remove("active"); };
@@ -98,10 +99,21 @@ function initNavigation() {
     closeAllModals();
   });
 
+  // Botão Sair do Menu Lateral: Limpa a sessão do Admin para exigir senha na próxima intent de edição
+  exitBtn.addEventListener("click", () => {
+    isGlobalAdminAuthenticated = false;
+    sessionStorage.removeItem('bourbon_admin_auth');
+    closeMenu();
+    if (unsubscribeVanListener) unsubscribeVanListener();
+    currentVanId = null;
+    document.getElementById("van-management").classList.add("hidden");
+    document.getElementById("home-view").classList.remove("hidden");
+    showToast("Sessão de administrador encerrada.", "info");
+  });
+
   backHomeBtn.addEventListener("click", () => {
     if (unsubscribeVanListener) unsubscribeVanListener();
     currentVanId = null;
-    isAuthenticatedForEdit = false;
     document.getElementById("van-management").classList.add("hidden");
     document.getElementById("home-view").classList.remove("hidden");
   });
@@ -114,10 +126,10 @@ function initNavigation() {
     }
   });
 
-  // Tooltip de Rotas ao passar o mouse
+  // Tooltip de Rotas
   const tooltip = document.getElementById("route-tooltip");
   document.querySelectorAll(".van-btn").forEach(btn => {
-    btn.addEventListener("mouseenter", (e) => {
+    btn.addEventListener("mouseenter", () => {
       const route = btn.getAttribute("data-route");
       if (route) {
         tooltip.textContent = `Rota: ${route}`;
@@ -135,7 +147,7 @@ function initNavigation() {
 }
 
 // ==========================================
-// GERENCIAMENTO DE SELEÇÃO DE VANS (TEMPO REAL)
+// GERENCIAMENTO DE SELEÇÃO DE VANS
 // ==========================================
 function initVanButtons() {
   const vanButtons = document.querySelectorAll(".van-btn");
@@ -143,12 +155,11 @@ function initVanButtons() {
   vanButtons.forEach(btn => {
     let clickTimeout = null;
 
-    // Clique Simples (Gerenciamento / Autenticação Admin)
-    btn.addEventListener("click", (e) => {
+    btn.addEventListener("click", () => {
       if (clickTimeout) {
         clearTimeout(clickTimeout);
         clickTimeout = null;
-        return; // Ignora se for o segundo clique do duplo clique
+        return;
       }
 
       clickTimeout = setTimeout(() => {
@@ -156,8 +167,8 @@ function initVanButtons() {
         const vanName = btn.textContent.trim();
         clickTimeout = null;
 
-        // Se já for admin autenticado na sessão, abre direto
-        if (isAuthenticatedForEdit && currentVanId === vanId) {
+        // Se o admin já estiver autenticado na sessão atual, entra direto sem pedir senha
+        if (isGlobalAdminAuthenticated) {
           selectVan(vanId, vanName);
         } else {
           pendingVanSelection = { id: vanId, name: vanName };
@@ -168,8 +179,7 @@ function initVanButtons() {
       }, 250);
     });
 
-    // Duplo Clique (Resumo Rápido da Van)
-    btn.addEventListener("dblclick", (e) => {
+    btn.addEventListener("dblclick", () => {
       if (clickTimeout) clearTimeout(clickTimeout);
       const vanId = btn.getAttribute("data-id");
       const vanName = btn.textContent.trim();
@@ -189,10 +199,8 @@ function selectVan(vanId, vanName) {
   document.getElementById("home-view").classList.add("hidden");
   document.getElementById("van-management").classList.remove("hidden");
 
-  // Ativar ou desativar campos baseado na autenticação Admin
-  toggleEditPermissions(isAuthenticatedForEdit);
-
-  // Carregar e sincronizar em tempo real com o Firestore
+  // Como passou pela autenticação, libera as permissões de edição
+  toggleEditPermissions(true);
   subscribeToVanData(vanId);
 }
 
@@ -221,7 +229,6 @@ function subscribeToVanData(vanId) {
     if (docSnap.exists()) {
       currentVanData = docSnap.data();
     } else {
-      // Cria o documento padrão caso não exista
       currentVanData = { driver: "", capacity: 16, collaborators: [] };
       await setDoc(vanRef, currentVanData);
     }
@@ -265,35 +272,42 @@ function renderCollaboratorsTable() {
       <td>${escapeHtml(c.sector)}</td>
       <td>${escapeHtml(c.address)}</td>
       <td>
-        <span class="badge ${isOff ? 'badge-warning' : 'badge-available'}">
-          ${isOff ? 'Folga' : 'Trabalhando'}
-        </span>
+        <button class="badge ${isOff ? 'badge-warning' : 'badge-available'} admin-toggle-status" data-index="${index}" title="Clique para alterar status do passageiro" style="cursor: pointer; border: none;">
+          ${isOff ? 'Folga' : 'Trabalhando'} <i class="fa-solid fa-repeat" style="font-size: 0.7rem; margin-left: 4px;"></i>
+        </button>
       </td>
       <td class="action-td">
-        ${isAuthenticatedForEdit ? `
-          <button class="icon-btn edit-collab" data-index="${index}" title="Editar"><i class="fa-solid fa-pen" style="color:var(--secondary); font-size:1rem;"></i></button>
-          <button class="icon-btn delete-collab" data-index="${index}" title="Excluir"><i class="fa-solid fa-trash" style="color:var(--danger); font-size:1rem;"></i></button>
-        ` : '--'}
+        <button class="icon-btn edit-collab" data-index="${index}" title="Editar"><i class="fa-solid fa-pen" style="color:var(--secondary); font-size:1rem;"></i></button>
+        <button class="icon-btn delete-collab" data-index="${index}" title="Excluir"><i class="fa-solid fa-trash" style="color:var(--danger); font-size:1rem;"></i></button>
       </td>
     `;
     tbody.appendChild(tr);
   });
 
-  if (isAuthenticatedForEdit) {
-    document.querySelectorAll(".edit-collab").forEach(btn => {
-      btn.addEventListener("click", (e) => editCollaborator(e.currentTarget.getAttribute("data-index")));
-    });
-    document.querySelectorAll(".delete-collab").forEach(btn => {
-      btn.addEventListener("click", (e) => deleteCollaborator(e.currentTarget.getAttribute("data-index")));
-    });
-  }
+  // Eventos para edição, exclusão e alteração direta de status pelo Admin
+  document.querySelectorAll(".edit-collab").forEach(btn => {
+    btn.addEventListener("click", (e) => editCollaborator(e.currentTarget.getAttribute("data-index")));
+  });
+  document.querySelectorAll(".delete-collab").forEach(btn => {
+    btn.addEventListener("click", (e) => deleteCollaborator(e.currentTarget.getAttribute("data-index")));
+  });
+  document.querySelectorAll(".admin-toggle-status").forEach(btn => {
+    btn.addEventListener("click", (e) => adminToggleCollaboratorStatus(e.currentTarget.getAttribute("data-index")));
+  });
+}
+
+async function adminToggleCollaboratorStatus(index) {
+  if (!currentVanData.collaborators[index]) return;
+  const currentStatus = currentVanData.collaborators[index].isOff || false;
+  currentVanData.collaborators[index].isOff = !currentStatus;
+
+  await saveVanDataToFirestore();
+  showToast("Status do passageiro alterado pelo administrador!", "success");
 }
 
 function updateProgressBar() {
   const capacity = parseInt(document.getElementById("max-capacity").value) || 16;
   const collaborators = currentVanData.collaborators || [];
-  
-  // Considera apenas quem NÃO está de folga para a lotação ativa
   const activeCount = collaborators.filter(c => !c.isOff).length;
   
   const percentage = Math.min(Math.round((activeCount / capacity) * 100), 100);
@@ -321,7 +335,7 @@ function updateProgressBar() {
 }
 
 // ==========================================
-// FORMULÁRIOS E AÇÕES DE ESCRITA NO FIRESTORE
+// FORMULÁRIOS E ESCRITA NO FIRESTORE
 // ==========================================
 function initFormListeners() {
   const collabForm = document.getElementById("collab-form");
@@ -330,7 +344,6 @@ function initFormListeners() {
 
   collabForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!isAuthenticatedForEdit) return;
 
     const idField = document.getElementById("collab-id").value;
     const name = document.getElementById("collab-name").value.trim();
@@ -341,18 +354,16 @@ function initFormListeners() {
     if (!currentVanData.collaborators) currentVanData.collaborators = [];
 
     if (idField === "") {
-      // Adicionar novo
       currentVanData.collaborators.push({
         name,
         registration,
         sector,
         address,
         isOff: false,
-        password: null // Senha configurável pelo colaborador depois
+        password: null
       });
       showToast("Colaborador adicionado com sucesso!", "success");
     } else {
-      // Editar existente mantendo a senha anterior
       const index = parseInt(idField);
       const existingPass = currentVanData.collaborators[index].password || null;
       const existingIsOff = currentVanData.collaborators[index].isOff || false;
@@ -384,7 +395,6 @@ function initFormListeners() {
   });
 
   saveAllBtn.addEventListener("click", async () => {
-    if (!isAuthenticatedForEdit) return;
     currentVanData.driver = document.getElementById("driver-name").value.trim();
     currentVanData.capacity = parseInt(document.getElementById("max-capacity").value) || 16;
     
@@ -431,7 +441,6 @@ async function saveVanDataToFirestore() {
 // MODAIS E AUTENTICAÇÃO
 // ==========================================
 function initModals() {
-  // Modal de Senha Admin
   const passModal = document.getElementById("password-modal");
   const confirmAuthBtn = document.getElementById("confirm-auth-btn");
   const cancelAuthBtn = document.getElementById("cancel-auth-btn");
@@ -453,7 +462,8 @@ function initModals() {
 
   confirmAuthBtn.addEventListener("click", () => {
     if (passInput.value === ADMIN_PASSWORD) {
-      isAuthenticatedForEdit = true;
+      isGlobalAdminAuthenticated = true;
+      sessionStorage.setItem('bourbon_admin_auth', 'true');
       passModal.classList.add("hidden");
       showToast("Autenticado como Administrador com sucesso!", "success");
       if (pendingVanSelection) {
@@ -469,12 +479,10 @@ function initModals() {
     if (e.key === "Enter") confirmAuthBtn.click();
   });
 
-  // Fechar modais genéricos no botão X ou overlay
   document.querySelectorAll(".close-modal-btn, #close-user-auth, #close-user-panel").forEach(btn => {
     btn.addEventListener("click", closeAllModals);
   });
 
-  // Autenticação / Login do Colaborador
   const userAuthForm = document.getElementById("user-auth-form");
   userAuthForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -502,7 +510,6 @@ function closeAllModals() {
 // PAINEL E LOGIN DO COLABORADOR
 // ==========================================
 async function handleCollabLogin(registration, password, remember) {
-  // Varre todas as 4 vans para encontrar o colaborador pela matrícula
   let foundCollab = null;
   let foundVanId = null;
   let collabIndex = -1;
@@ -531,7 +538,6 @@ async function handleCollabLogin(registration, password, remember) {
     return;
   }
 
-  // Se o colaborador ainda não tem senha cadastrada, define esta nova senha
   if (!foundCollab.password) {
     foundCollab.password = password;
     const vRef = doc(db, "vans", foundVanId);
@@ -545,7 +551,6 @@ async function handleCollabLogin(registration, password, remember) {
     return;
   }
 
-  // Login bem-sucedido
   loggedUserRegistration = registration;
   if (remember) {
     localStorage.setItem("bourbon_logged_user", registration);
@@ -557,7 +562,6 @@ async function handleCollabLogin(registration, password, remember) {
 }
 
 async function checkAutoLogin() {
-  // Valida silenciosamente se o usuário salvo ainda existe
   const vanIds = ['van1', 'van2', 'van3', 'van4'];
   for (const vId of vanIds) {
     const vRef = doc(db, "vans", vId);
@@ -569,7 +573,6 @@ async function checkAutoLogin() {
       }
     }
   }
-  // Se não encontrar mais, limpa
   localStorage.removeItem("bourbon_logged_user");
   loggedUserRegistration = null;
 }
@@ -630,7 +633,6 @@ async function openUserPanel() {
     fleetList.appendChild(tr);
   });
 
-  // Evento para alternar folga do próprio usuário logado
   document.querySelectorAll(".toggle-status-btn").forEach(btn => {
     btn.addEventListener("click", async (e) => {
       const vId = e.currentTarget.getAttribute("data-van");
@@ -645,7 +647,7 @@ async function openUserPanel() {
 
         await setDoc(vRef, vData);
         showToast("Status de folga atualizado com sucesso!", "success");
-        openUserPanel(); // Atualiza a tabela do painel
+        openUserPanel();
       }
     });
   });
@@ -700,7 +702,7 @@ async function openVanSummaryModal(vanId, vanName) {
 }
 
 // ==========================================
-// UTILITÁRIOS (TOASTS E SEGURANÇA)
+// UTILITÁRIOS
 // ==========================================
 function showToast(message, type = "success") {
   const container = document.getElementById("toast-container");
