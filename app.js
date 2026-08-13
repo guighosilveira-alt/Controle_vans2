@@ -577,7 +577,6 @@ function closeAllModals() {
 
 async function checkAutoLogin() {
   if (loggedUserRegistration) {
-    // Valida se o usuário ainda existe na frota
     const vanIds = ['van1', 'van2', 'van3', 'van4'];
     let exists = false;
     for (const vId of vanIds) {
@@ -605,6 +604,9 @@ async function openUserPanel() {
   const fleetList = document.getElementById("fleet-status-list");
   
   if (!fleetList) return;
+
+  // ADIÇÃO: Barra de rolagem externa no lado direito com altura estendida e limite responsivo (70vh)
+  fleetList.style.cssText = "max-height: 70vh; overflow-y: auto; overflow-x: hidden; padding-right: 8px;";
 
   fleetList.innerHTML = "<div style='text-align:center; padding: 20px; color: var(--secondary);'>Carregando status da frota...</div>";
   panelModal.classList.remove("hidden");
