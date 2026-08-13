@@ -605,7 +605,7 @@ async function openUserPanel() {
   
   if (!fleetList) return;
 
-  // ADIÇÃO: Barra de rolagem externa no lado direito com altura estendida e limite responsivo (70vh)
+  // Barra de rolagem vertical externa no lado direito geral do container com limite de 70vh
   fleetList.style.cssText = "max-height: 70vh; overflow-y: auto; overflow-x: hidden; padding-right: 8px;";
 
   fleetList.innerHTML = "<div style='text-align:center; padding: 20px; color: var(--secondary);'>Carregando status da frota...</div>";
@@ -637,12 +637,14 @@ async function openUserPanel() {
 
     const vanSection = document.createElement("div");
     vanSection.className = "van-panel-group";
-    vanSection.style.cssText = "margin-bottom: 20px; background: var(--bg-card); border-radius: 8px; padding: 12px; box-shadow: var(--shadow-sm); border: 1px solid var(--border-color);";
+    // Centralização vertical interna de cada box/card de van e espaçamento otimizado
+    vanSection.style.cssText = "margin-bottom: 20px; background: var(--bg-card); border-radius: 8px; padding: 12px; box-shadow: var(--shadow-sm); border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: center;";
 
     let rowsHtml = "";
     if (collaborators.length === 0) {
       rowsHtml = `<div style="text-align: center; color: var(--secondary); font-size: 0.9rem; padding: 8px;">Nenhum colaborador nesta van.</div>`;
     } else {
+      // Barra de rolagem interna mantida individualmente para cada tabela de van
       rowsHtml = `<div class="table-responsive" style="max-height: 220px; overflow-y: auto; overflow-x: auto;">
         <table class="data-table" style="width: 100%; border-collapse: collapse;">
           <thead>
