@@ -272,22 +272,12 @@
       </div>
       <div class="modal-body">
         <p style="margin-bottom: 15px; font-size: 0.9rem;">Você pode visualizar o status de todos os colaboradores e alterar o seu próprio status de folga.</p>
-        <div class="table-wrapper">
-          <table id="fleet-status-table">
-            <thead>
-              <tr>
-                <th>Colaborador</th>
-                <th>Matrícula</th>
-                <th>Van</th>
-                <th>Setor</th>
-                <th>Status (Folga)</th>
-              </tr>
-            </thead>
-            <tbody id="fleet-status-list">
-              <!-- Preenchido dinamicamente -->
-            </tbody>
-          </table>
+        
+        <!-- CONTAINER QUE RECEBE A BARRA DE ROLAGEM EXTERNA E OS CARDS CENTRALIZADOS -->
+        <div id="fleet-status-list">
+          <!-- Preenchido dinamicamente pelo app.js -->
         </div>
+
         <div style="margin-top: 20px; text-align: right;">
           <button type="button" id="logout-user-btn" class="btn danger-btn"><i class="fa-solid fa-right-from-bracket"></i> Desconectar</button>
         </div>
