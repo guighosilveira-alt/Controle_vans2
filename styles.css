@@ -537,19 +537,20 @@ select:focus {
 /* ESTILIZAÇÃO DO PAINEL DE STATUS DA FROTA COM ROLAGEM HORIZONTAL */
 #fleet-status-list {
   display: flex;
-  flex-direction: row;    /* Organiza os cards das vans lado a lado */
-  overflow-x: auto;       /* Ativa a barra de rolagem horizontal */
+  flex-direction: row;
+  overflow-x: auto;
   overflow-y: hidden;
   gap: 20px;
   padding: 15px 5px 25px 5px;
   width: 100%;
-  scroll-snap-type: x mandatory; /* Efeito suave de encaixe ao rolar os cards */
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch; /* Suaviza o scroll em celulares */
 }
 
 /* Garante tamanho ideal fixo para os cards deslizarem horizontalmente */
-#fleet-status-list .card, 
-#fleet-status-list .van-status-card {
-  flex: 0 0 320px;        /* Cada card terá exatamente 320px de largura */
+#fleet-status-list .van-panel-group {
+  flex: 0 0 320px;
+  min-width: 320px;
   max-width: 320px;
   scroll-snap-align: start;
   margin-bottom: 0;
