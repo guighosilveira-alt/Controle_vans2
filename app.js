@@ -1,7 +1,16 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { 
+  getFirestore, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  onSnapshot, 
+  updateDoc 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-// CONFIGURAÇÃO DO FIREBASE (NOVO PROJETO)
+// ==========================================
+// CONFIGURAÇÃO DO FIREBASE
+// ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyAdsFHnwDSSUXvNPLWy5zRLXQNoMeH582E",
   authDomain: "controle-vans-bourbon2.firebaseapp.com",
@@ -11,11 +20,12 @@ const firebaseConfig = {
   appId: "1:266501330110:web:f8868bb865a82ad6cffaef"
 };
 
-// Inicializa Firebase e Firestore
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// ESTADO DA APLICAÇÃO EM MEMÓRIA
+// ==========================================
+// ESTADO DA APLICAÇÃO
+// ==========================================
 let currentVanId = null;
 let currentVanData = {
   driver: '',
@@ -25,91 +35,684 @@ let currentVanData = {
 
 let isAuthenticatedForEdit = false;
 let unsubscribeVanListener = null;
+let loggedUserRegistration = localStorage.getItem('bourbon_logged_user') || null;
 
+// Senha padrão de Administrador
+const ADMIN_PASSWORD = "admin"; 
 
-// ELEMENTOS DOM
-const hamburgerBtn = document.getElementById('hamburger-btn');
-const sideMenu = document.getElementById('side-menu');
-const closeMenuBtn = document.getElementById('close-menu-btn');
-const overlay = document.getElementById('overlay');
-const vanButtons = document.querySelectorAll('.van-btn');
-const routeTooltip = document.getElementById('route-tooltip');
+// ==========================================
+// INICIALIZAÇÃO E EVENTOS GLOBAIS
+// ==========================================
+document.addEventListener("DOMContentLoaded", () => {
+  initTheme();
+  initNavigation();
+  initModals();
+  initVanButtons();
+  initFormListeners();
 
-const homeView = document.getElementById('home-view');
-const vanManagement = document.getElementById('van-management');
-const currentVanTitle = document.getElementById('current-van-title');
-const driverNameInput = document.getElementById('driver-name');
-const maxCapacityInput = document.getElementById('max-capacity');
-const capacityBadge = document.getElementById('capacity-badge');
+  // Verifica se já existe usuário logado localmente
+  if (loggedUserRegistration) {
+    checkAutoLogin();
+  }
+});
 
-// PROGRESS BAR E COUNTER
-const progressBarFill = document.getElementById('progress-bar-fill');
-const progressText = document.getElementById('progress-text');
-const occupantsCounterText = document.getElementById('occupants-counter-text');
-
-const collabSectionCard = document.getElementById('collab-section-card');
-const collabForm = document.getElementById('collab-form');
-const collabIdInput = document.getElementById('collab-id');
-const collabNameInput = document.getElementById('collab-name');
-const collabRegistrationInput = document.getElementById('collab-registration');
-const collabSectorInput = document.getElementById('collab-sector');
-const collabAddressInput = document.getElementById('collab-address');
-const collabList = document.getElementById('collab-list');
-const cancelEditBtn = document.getElementById('cancel-edit-btn');
-const saveAllBtn = document.getElementById('save-all-btn');
-const backHomeBtn = document.getElementById('back-home-btn');
-const exitBtn = document.getElementById('exit-btn');
-
+// ==========================================
 // TEMA ESCURO / CLARO
-const themeToggleBtn = document.getElementById('theme-toggle-btn');
-const themeIcon = document.getElementById('theme-icon');
+// ==========================================
+function initTheme() {
+  const themeToggleBtn = document.getElementById("theme-toggle-btn");
+  const themeIcon = document.getElementById("theme-icon");
+  
+  const savedTheme = localStorage.getItem("bourbon_theme");
+  if (savedTheme === "dark") {
+    document.body.classList.add("dark-mode");
+    themeIcon.classList.replace("fa-moon", "fa-sun");
+  }
 
-// MODAIS
-const aboutBtn = document.getElementById('about-btn');
-const aboutModal = document.getElementById('about-modal');
-const occupantsModal = document.getElementById('occupants-modal');
-const closeModalBtns = document.querySelectorAll('.close-modal-btn');
+  themeToggleBtn.addEventListener("click", () => {
+    document.body.classList.toggle("dark-mode");
+    const isDark = document.body.classList.contains("dark-mode");
+    localStorage.setItem("bourbon_theme", isDark ? "dark" : "light");
+    themeIcon.classList.replace(isDark ? "fa-moon" : "fa-sun", isDark ? "fa-sun" : "fa-moon");
+  });
+}
 
-// ELEMENTOS DO MODAL DE SENHA ADMIN
-const passwordModal = document.getElementById('password-modal');
-const authPasswordInput = document.getElementById('auth-password-input');
-const togglePassVisibilityBtn = document.getElementById('toggle-pass-visibility');
-const eyeIcon = document.getElementById('eye-icon');
-const confirmAuthBtn = document.getElementById('confirm-auth-btn');
-const cancelAuthBtn = document.getElementById('cancel-auth-btn');
-const closePassModalBtn = document.getElementById('close-pass-modal');
+// ==========================================
+// NAVEGAÇÃO E MENU LATERAL
+// ==========================================
+function initNavigation() {
+  const hamburgerBtn = document.getElementById("hamburger-btn");
+  const closeMenuBtn = document.getElementById("close-menu-btn");
+  const sideMenu = document.getElementById("side-menu");
+  const overlay = document.getElementById("overlay");
+  const backHomeBtn = document.getElementById("back-home-btn");
+  const userLoginTriggerBtn = document.getElementById("user-login-trigger-btn");
 
-// MODAL DE LOGIN DE USUÁRIO / MATRÍCULA
-const userLoginTriggerBtn = document.getElementById('user-login-trigger-btn');
-const userAuthModal = document.getElementById('user-auth-modal');
-const closeUserAuthBtn = document.getElementById('close-user-auth');
-const userAuthForm = document.getElementById('user-auth-form');
-const loginRegistrationInput = document.getElementById('login-registration');
-const loginPasswordInput = document.getElementById('login-password');
-const rememberMeCheckbox = document.getElementById('remember-me-checkbox');
-const forgotPasswordBtn = document.getElementById('forgot-password-btn');
+  const openMenu = () => { sideMenu.classList.add("open"); overlay.classList.add("active"); };
+  const closeMenu = () => { sideMenu.classList.remove("open"); overlay.classList.remove("active"); };
 
-// PAINEL DO COLABORADOR
-const userPanelModal = document.getElementById('user-panel-modal');
-const closeUserPanelBtn = document.getElementById('close-user-panel');
-const fleetStatusList = document.getElementById('fleet-status-list');
-const logoutUserBtn = document.getElementById('logout-user-btn');
+  hamburgerBtn.addEventListener("click", openMenu);
+  closeMenuBtn.addEventListener("click", closeMenu);
+  overlay.addEventListener("click", () => {
+    closeMenu();
+    closeAllModals();
+  });
 
-let pendingVanId = null;
-let pendingVanTitle = null;
-let loggedUserRegistration = null;
+  backHomeBtn.addEventListener("click", () => {
+    if (unsubscribeVanListener) unsubscribeVanListener();
+    currentVanId = null;
+    isAuthenticatedForEdit = false;
+    document.getElementById("van-management").classList.add("hidden");
+    document.getElementById("home-view").classList.remove("hidden");
+  });
 
-// SISTEMA DE TOAST NOTIFICATIONS
-function showToast(message, type = 'success') {
-  const container = document.getElementById('toast-container');
-  const toast = document.createElement('div');
+  userLoginTriggerBtn.addEventListener("click", () => {
+    if (loggedUserRegistration) {
+      openUserPanel();
+    } else {
+      document.getElementById("user-auth-modal").classList.remove("hidden");
+    }
+  });
+
+  // Tooltip de Rotas ao passar o mouse
+  const tooltip = document.getElementById("route-tooltip");
+  document.querySelectorAll(".van-btn").forEach(btn => {
+    btn.addEventListener("mouseenter", (e) => {
+      const route = btn.getAttribute("data-route");
+      if (route) {
+        tooltip.textContent = `Rota: ${route}`;
+        tooltip.classList.remove("hidden");
+      }
+    });
+    btn.addEventListener("mousemove", (e) => {
+      tooltip.style.left = `${e.pageX + 15}px`;
+      tooltip.style.top = `${e.pageY + 15}px`;
+    });
+    btn.addEventListener("mouseleave", () => {
+      tooltip.classList.add("hidden");
+    });
+  });
+}
+
+// ==========================================
+// GERENCIAMENTO DE SELEÇÃO DE VANS (TEMPO REAL)
+// ==========================================
+function initVanButtons() {
+  const vanButtons = document.querySelectorAll(".van-btn");
+
+  vanButtons.forEach(btn => {
+    let clickTimeout = null;
+
+    // Clique Simples (Gerenciamento / Autenticação Admin)
+    btn.addEventListener("click", (e) => {
+      if (clickTimeout) {
+        clearTimeout(clickTimeout);
+        clickTimeout = null;
+        return; // Ignora se for o segundo clique do duplo clique
+      }
+
+      clickTimeout = setTimeout(() => {
+        const vanId = btn.getAttribute("data-id");
+        const vanName = btn.textContent.trim();
+        clickTimeout = null;
+
+        // Se já for admin autenticado na sessão, abre direto
+        if (isAuthenticatedForEdit && currentVanId === vanId) {
+          selectVan(vanId, vanName);
+        } else {
+          pendingVanSelection = { id: vanId, name: vanName };
+          document.getElementById("password-modal").classList.remove("hidden");
+          document.getElementById("auth-password-input").value = "";
+          document.getElementById("auth-password-input").focus();
+        }
+      }, 250);
+    });
+
+    // Duplo Clique (Resumo Rápido da Van)
+    btn.addEventListener("dblclick", (e) => {
+      if (clickTimeout) clearTimeout(clickTimeout);
+      const vanId = btn.getAttribute("data-id");
+      const vanName = btn.textContent.trim();
+      openVanSummaryModal(vanId, vanName);
+    });
+  });
+}
+
+let pendingVanSelection = null;
+
+function selectVan(vanId, vanName) {
+  currentVanId = vanId;
+  document.getElementById("current-van-title").textContent = vanName;
+  document.getElementById("side-menu").classList.remove("open");
+  document.getElementById("overlay").classList.remove("active");
+  
+  document.getElementById("home-view").classList.add("hidden");
+  document.getElementById("van-management").classList.remove("hidden");
+
+  // Ativar ou desativar campos baseado na autenticação Admin
+  toggleEditPermissions(isAuthenticatedForEdit);
+
+  // Carregar e sincronizar em tempo real com o Firestore
+  subscribeToVanData(vanId);
+}
+
+function toggleEditPermissions(isEditable) {
+  const inputs = document.querySelectorAll("#van-management input, #van-management select, #collab-form button, #save-all-btn");
+  inputs.forEach(el => {
+    if (el.id !== "back-home-btn") {
+      el.disabled = !isEditable;
+    }
+  });
+  const collabCard = document.getElementById("collab-section-card");
+  if (collabCard) {
+    collabCard.style.opacity = isEditable ? "1" : "0.6";
+  }
+}
+
+// ==========================================
+// SINCRONIZAÇÃO EM TEMPO REAL (FIRESTORE)
+// ==========================================
+function subscribeToVanData(vanId) {
+  if (unsubscribeVanListener) unsubscribeVanListener();
+
+  const vanRef = doc(db, "vans", vanId);
+
+  unsubscribeVanListener = onSnapshot(vanRef, async (docSnap) => {
+    if (docSnap.exists()) {
+      currentVanData = docSnap.data();
+    } else {
+      // Cria o documento padrão caso não exista
+      currentVanData = { driver: "", capacity: 16, collaborators: [] };
+      await setDoc(vanRef, currentVanData);
+    }
+    updateVanUI();
+  }, (error) => {
+    console.error("Erro ao sincronizar dados da van:", error);
+    showToast("Erro de sincronização em tempo real.", "error");
+  });
+}
+
+function updateVanUI() {
+  document.getElementById("driver-name").value = currentVanData.driver || "";
+  document.getElementById("max-capacity").value = currentVanData.capacity || 16;
+  
+  renderCollaboratorsTable();
+  updateProgressBar();
+}
+
+// ==========================================
+// TABELA E COLABORADORES
+// ==========================================
+function renderCollaboratorsTable() {
+  const tbody = document.getElementById("collab-list");
+  tbody.innerHTML = "";
+
+  const collaborators = currentVanData.collaborators || [];
+  document.getElementById("occupants-counter-text").textContent = `Ocupantes cadastrados: ${collaborators.length}`;
+
+  if (collaborators.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--secondary);">Nenhum colaborador cadastrado nesta van.</td></tr>`;
+    return;
+  }
+
+  collaborators.forEach((c, index) => {
+    const tr = document.createElement("tr");
+    const isOff = c.isOff || false;
+    
+    tr.innerHTML = `
+      <td>${escapeHtml(c.name)}</td>
+      <td>${escapeHtml(c.registration)}</td>
+      <td>${escapeHtml(c.sector)}</td>
+      <td>${escapeHtml(c.address)}</td>
+      <td>
+        <span class="badge ${isOff ? 'badge-warning' : 'badge-available'}">
+          ${isOff ? 'Folga' : 'Trabalhando'}
+        </span>
+      </td>
+      <td class="action-td">
+        ${isAuthenticatedForEdit ? `
+          <button class="icon-btn edit-collab" data-index="${index}" title="Editar"><i class="fa-solid fa-pen" style="color:var(--secondary); font-size:1rem;"></i></button>
+          <button class="icon-btn delete-collab" data-index="${index}" title="Excluir"><i class="fa-solid fa-trash" style="color:var(--danger); font-size:1rem;"></i></button>
+        ` : '--'}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  if (isAuthenticatedForEdit) {
+    document.querySelectorAll(".edit-collab").forEach(btn => {
+      btn.addEventListener("click", (e) => editCollaborator(e.currentTarget.getAttribute("data-index")));
+    });
+    document.querySelectorAll(".delete-collab").forEach(btn => {
+      btn.addEventListener("click", (e) => deleteCollaborator(e.currentTarget.getAttribute("data-index")));
+    });
+  }
+}
+
+function updateProgressBar() {
+  const capacity = parseInt(document.getElementById("max-capacity").value) || 16;
+  const collaborators = currentVanData.collaborators || [];
+  
+  // Considera apenas quem NÃO está de folga para a lotação ativa
+  const activeCount = collaborators.filter(c => !c.isOff).length;
+  
+  const percentage = Math.min(Math.round((activeCount / capacity) * 100), 100);
+  
+  const fill = document.getElementById("progress-bar-fill");
+  const text = document.getElementById("progress-text");
+  const badge = document.getElementById("capacity-badge");
+
+  fill.style.width = `${percentage}%`;
+  text.textContent = `${activeCount} / ${capacity} vagas ativas`;
+
+  if (activeCount >= capacity) {
+    fill.style.backgroundColor = "var(--danger)";
+    badge.className = "badge badge-full";
+    badge.textContent = "Lotação Completa";
+  } else if (activeCount >= capacity * 0.8) {
+    fill.style.backgroundColor = "var(--warning)";
+    badge.className = "badge badge-warning";
+    badge.textContent = "Quase Completa";
+  } else {
+    fill.style.backgroundColor = "var(--success)";
+    badge.className = "badge badge-available";
+    badge.textContent = "Vagas Disponíveis";
+  }
+}
+
+// ==========================================
+// FORMULÁRIOS E AÇÕES DE ESCRITA NO FIRESTORE
+// ==========================================
+function initFormListeners() {
+  const collabForm = document.getElementById("collab-form");
+  const saveAllBtn = document.getElementById("save-all-btn");
+  const cancelEditBtn = document.getElementById("cancel-edit-btn");
+
+  collabForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!isAuthenticatedForEdit) return;
+
+    const idField = document.getElementById("collab-id").value;
+    const name = document.getElementById("collab-name").value.trim();
+    const registration = document.getElementById("collab-registration").value.trim();
+    const sector = document.getElementById("collab-sector").value;
+    const address = document.getElementById("collab-address").value.trim();
+
+    if (!currentVanData.collaborators) currentVanData.collaborators = [];
+
+    if (idField === "") {
+      // Adicionar novo
+      currentVanData.collaborators.push({
+        name,
+        registration,
+        sector,
+        address,
+        isOff: false,
+        password: null // Senha configurável pelo colaborador depois
+      });
+      showToast("Colaborador adicionado com sucesso!", "success");
+    } else {
+      // Editar existente mantendo a senha anterior
+      const index = parseInt(idField);
+      const existingPass = currentVanData.collaborators[index].password || null;
+      const existingIsOff = currentVanData.collaborators[index].isOff || false;
+
+      currentVanData.collaborators[index] = {
+        name,
+        registration,
+        sector,
+        address,
+        isOff: existingIsOff,
+        password: existingPass
+      };
+      showToast("Colaborador atualizado com sucesso!", "success");
+      cancelEditBtn.classList.add("hidden");
+      document.getElementById("save-collab-btn").innerHTML = `<i class="fa-solid fa-plus"></i> Adicionar Colaborador`;
+    }
+
+    collabForm.reset();
+    document.getElementById("collab-id").value = "";
+
+    await saveVanDataToFirestore();
+  });
+
+  cancelEditBtn.addEventListener("click", () => {
+    collabForm.reset();
+    document.getElementById("collab-id").value = "";
+    cancelEditBtn.classList.add("hidden");
+    document.getElementById("save-collab-btn").innerHTML = `<i class="fa-solid fa-plus"></i> Adicionar Colaborador`;
+  });
+
+  saveAllBtn.addEventListener("click", async () => {
+    if (!isAuthenticatedForEdit) return;
+    currentVanData.driver = document.getElementById("driver-name").value.trim();
+    currentVanData.capacity = parseInt(document.getElementById("max-capacity").value) || 16;
+    
+    await saveVanDataToFirestore();
+    showToast("Dados gerais da van salvos com sucesso!", "success");
+  });
+}
+
+function editCollaborator(index) {
+  const c = currentVanData.collaborators[index];
+  if (!c) return;
+
+  document.getElementById("collab-id").value = index;
+  document.getElementById("collab-name").value = c.name;
+  document.getElementById("collab-registration").value = c.registration;
+  document.getElementById("collab-sector").value = c.sector;
+  document.getElementById("collab-address").value = c.address;
+
+  document.getElementById("save-collab-btn").innerHTML = `<i class="fa-solid fa-check"></i> Salvar Alteração`;
+  document.getElementById("cancel-edit-btn").classList.remove("hidden");
+  document.getElementById("collab-name").focus();
+}
+
+async function deleteCollaborator(index) {
+  if (!confirm("Tem certeza que deseja remover este colaborador da van?")) return;
+  
+  currentVanData.collaborators.splice(index, 1);
+  await saveVanDataToFirestore();
+  showToast("Colaborador removido.", "warning");
+}
+
+async function saveVanDataToFirestore() {
+  if (!currentVanId) return;
+  try {
+    const vanRef = doc(db, "vans", currentVanId);
+    await setDoc(vanRef, currentVanData, { merge: true });
+  } catch (error) {
+    console.error("Erro ao salvar no Firestore:", error);
+    showToast("Erro ao salvar alterações no servidor.", "error");
+  }
+}
+
+// ==========================================
+// MODAIS E AUTENTICAÇÃO
+// ==========================================
+function initModals() {
+  // Modal de Senha Admin
+  const passModal = document.getElementById("password-modal");
+  const confirmAuthBtn = document.getElementById("confirm-auth-btn");
+  const cancelAuthBtn = document.getElementById("cancel-auth-btn");
+  const closePassModal = document.getElementById("close-pass-modal");
+  const passInput = document.getElementById("auth-password-input");
+  const togglePassVis = document.getElementById("toggle-pass-visibility");
+
+  const closeAuth = () => { passModal.classList.add("hidden"); pendingVanSelection = null; };
+
+  cancelAuthBtn.addEventListener("click", closeAuth);
+  closePassModal.addEventListener("click", closeAuth);
+
+  togglePassVis.addEventListener("click", () => {
+    const type = passInput.getAttribute("type") === "password" ? "text" : "password";
+    passInput.setAttribute("type", type);
+    document.getElementById("eye-icon").classList.toggle("fa-eye");
+    document.getElementById("eye-icon").classList.toggle("fa-eye-slash");
+  });
+
+  confirmAuthBtn.addEventListener("click", () => {
+    if (passInput.value === ADMIN_PASSWORD) {
+      isAuthenticatedForEdit = true;
+      passModal.classList.add("hidden");
+      showToast("Autenticado como Administrador com sucesso!", "success");
+      if (pendingVanSelection) {
+        selectVan(pendingVanSelection.id, pendingVanSelection.name);
+        pendingVanSelection = null;
+      }
+    } else {
+      showToast("Senha de Administrador incorreta!", "error");
+    }
+  });
+
+  passInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") confirmAuthBtn.click();
+  });
+
+  // Fechar modais genéricos no botão X ou overlay
+  document.querySelectorAll(".close-modal-btn, #close-user-auth, #close-user-panel").forEach(btn => {
+    btn.addEventListener("click", closeAllModals);
+  });
+
+  // Autenticação / Login do Colaborador
+  const userAuthForm = document.getElementById("user-auth-form");
+  userAuthForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const reg = document.getElementById("login-registration").value.trim();
+    const pass = document.getElementById("login-password").value;
+    const remember = document.getElementById("remember-me-checkbox").checked;
+
+    await handleCollabLogin(reg, pass, remember);
+  });
+
+  document.getElementById("logout-user-btn").addEventListener("click", () => {
+    localStorage.removeItem("bourbon_logged_user");
+    loggedUserRegistration = null;
+    closeAllModals();
+    showToast("Desconectado com sucesso.", "info");
+  });
+}
+
+function closeAllModals() {
+  document.querySelectorAll(".modal").forEach(m => m.classList.add("hidden"));
+  document.getElementById("overlay").classList.remove("active");
+}
+
+// ==========================================
+// PAINEL E LOGIN DO COLABORADOR
+// ==========================================
+async function handleCollabLogin(registration, password, remember) {
+  // Varre todas as 4 vans para encontrar o colaborador pela matrícula
+  let foundCollab = null;
+  let foundVanId = null;
+  let collabIndex = -1;
+
+  const vanIds = ['van1', 'van2', 'van3', 'van4'];
+
+  for (const vId of vanIds) {
+    const vRef = doc(db, "vans", vId);
+    const vSnap = await getDoc(vRef);
+    if (vSnap.exists()) {
+      const data = vSnap.data();
+      if (data.collaborators) {
+        const idx = data.collaborators.findIndex(c => c.registration === registration);
+        if (idx !== -1) {
+          foundCollab = data.collaborators[idx];
+          foundVanId = vId;
+          collabIndex = idx;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!foundCollab) {
+    showToast("Matrícula não encontrada em nenhuma van cadastrada.", "error");
+    return;
+  }
+
+  // Se o colaborador ainda não tem senha cadastrada, define esta nova senha
+  if (!foundCollab.password) {
+    foundCollab.password = password;
+    const vRef = doc(db, "vans", foundVanId);
+    const vSnap = await getDoc(vRef);
+    const data = vSnap.data();
+    data.collaborators[collabIndex] = foundCollab;
+    await setDoc(vRef, data);
+    showToast("Senha cadastrada com sucesso!", "success");
+  } else if (foundCollab.password !== password) {
+    showToast("Senha incorreta!", "error");
+    return;
+  }
+
+  // Login bem-sucedido
+  loggedUserRegistration = registration;
+  if (remember) {
+    localStorage.setItem("bourbon_logged_user", registration);
+  }
+
+  closeAllModals();
+  openUserPanel();
+  showToast(`Bem-vindo, ${foundCollab.name}!`, "success");
+}
+
+async function checkAutoLogin() {
+  // Valida silenciosamente se o usuário salvo ainda existe
+  const vanIds = ['van1', 'van2', 'van3', 'van4'];
+  for (const vId of vanIds) {
+    const vRef = doc(db, "vans", vId);
+    const vSnap = await getDoc(vRef);
+    if (vSnap.exists()) {
+      const data = vSnap.data();
+      if (data.collaborators && data.collaborators.some(c => c.registration === loggedUserRegistration)) {
+        return;
+      }
+    }
+  }
+  // Se não encontrar mais, limpa
+  localStorage.removeItem("bourbon_logged_user");
+  loggedUserRegistration = null;
+}
+
+async function openUserPanel() {
+  const panelModal = document.getElementById("user-panel-modal");
+  const fleetList = document.getElementById("fleet-status-list");
+  fleetList.innerHTML = "<tr><td colspan='5' style='text-align:center;'>Carregando status da frota...</td></tr>";
+  panelModal.classList.remove("hidden");
+  document.getElementById("overlay").classList.add("active");
+
+  const vanIds = [
+    { id: 'van1', name: '1. Zona Norte L.E' },
+    { id: 'van2', name: '2. Zona Norte L.D' },
+    { id: 'van3', name: '3. Alvorada Cima' },
+    { id: 'van4', name: '4. Alvorada Baixo' }
+  ];
+
+  fleetList.innerHTML = "";
+  let totalFleet = [];
+
+  for (const v of vanIds) {
+    const vRef = doc(db, "vans", v.id);
+    const vSnap = await getDoc(vRef);
+    if (vSnap.exists()) {
+      const data = vSnap.data();
+      if (data.collaborators) {
+        data.collaborators.forEach((c, idx) => {
+          totalFleet.push({ ...c, vanName: v.name, vanId: v.id, collabIndex: idx });
+        });
+      }
+    }
+  }
+
+  if (totalFleet.length === 0) {
+    fleetList.innerHTML = `<tr><td colspan="5" style="text-align: center;">Nenhum colaborador na frota.</td></tr>`;
+    return;
+  }
+
+  totalFleet.forEach(item => {
+    const isMe = item.registration === loggedUserRegistration;
+    const isOff = item.isOff || false;
+
+    const tr = document.createElement("tr");
+    if (isMe) tr.style.backgroundColor = "rgba(139, 0, 0, 0.08)";
+
+    tr.innerHTML = `
+      <td>${escapeHtml(item.name)} ${isMe ? '<strong>(Você)</strong>' : ''}</td>
+      <td>${escapeHtml(item.registration)}</td>
+      <td>${escapeHtml(item.vanName)}</td>
+      <td>${escapeHtml(item.sector)}</td>
+      <td>
+        <button class="btn ${isOff ? 'warning-btn' : 'success-btn'} toggle-status-btn" data-van="${item.vanId}" data-index="${item.collabIndex}" ${!isMe ? 'disabled style="opacity:0.7; cursor:not-allowed;"' : ''}>
+          ${isOff ? 'Folga (Mudar)' : 'Trabalhando (Mudar)'}
+        </button>
+      </td>
+    `;
+    fleetList.appendChild(tr);
+  });
+
+  // Evento para alternar folga do próprio usuário logado
+  document.querySelectorAll(".toggle-status-btn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const vId = e.currentTarget.getAttribute("data-van");
+      const cIdx = parseInt(e.currentTarget.getAttribute("data-index"));
+
+      const vRef = doc(db, "vans", vId);
+      const vSnap = await getDoc(vRef);
+      if (vSnap.exists()) {
+        const vData = vSnap.data();
+        const currentStatus = vData.collaborators[cIdx].isOff || false;
+        vData.collaborators[cIdx].isOff = !currentStatus;
+
+        await setDoc(vRef, vData);
+        showToast("Status de folga atualizado com sucesso!", "success");
+        openUserPanel(); // Atualiza a tabela do painel
+      }
+    });
+  });
+}
+
+// ==========================================
+// MODAL DE RESUMO (DUPLO CLIQUE NA VAN)
+// ==========================================
+async function openVanSummaryModal(vanId, vanName) {
+  const modal = document.getElementById("occupants-modal");
+  document.getElementById("modal-van-title").textContent = `Resumo: ${vanName}`;
+  
+  const vRef = doc(db, "vans", vanId);
+  const vSnap = await getDoc(vRef);
+  
+  let data = { driver: "Nenhum", capacity: 16, collaborators: [] };
+  if (vSnap.exists()) {
+    data = vSnap.data();
+  }
+
+  document.getElementById("modal-driver-name").textContent = data.driver || "Nenhum";
+  document.getElementById("modal-capacity").textContent = data.capacity || 16;
+  
+  const activeCount = (data.collaborators || []).filter(c => !c.isOff).length;
+  document.getElementById("modal-count").textContent = activeCount;
+  
+  const badge = document.getElementById("modal-status-badge");
+  const capacity = data.capacity || 16;
+  if (activeCount >= capacity) {
+    badge.className = "badge badge-full";
+    badge.textContent = "Lotada";
+  } else {
+    badge.className = "badge badge-available";
+    badge.textContent = "Disponível";
+  }
+
+  const listEl = document.getElementById("modal-occupants-list");
+  listEl.innerHTML = "";
+
+  if (!data.collaborators || data.collaborators.length === 0) {
+    listEl.innerHTML = `<li>Nenhum ocupante cadastrado.</li>`;
+  } else {
+    data.collaborators.forEach(c => {
+      const li = document.createElement("li");
+      li.innerHTML = `<strong>${escapeHtml(c.name)}</strong> (${escapeHtml(c.sector)}) - ${escapeHtml(c.address)} <span class="badge ${c.isOff ? 'badge-warning' : 'badge-available'}" style="float:right; font-size:0.7rem;">${c.isOff ? 'Folga' : 'Ativo'}</span>`;
+      listEl.appendChild(li);
+    });
+  }
+
+  modal.classList.remove("hidden");
+  document.getElementById("overlay").classList.add("active");
+}
+
+// ==========================================
+// UTILITÁRIOS (TOASTS E SEGURANÇA)
+// ==========================================
+function showToast(message, type = "success") {
+  const container = document.getElementById("toast-container");
+  const toast = document.createElement("div");
   toast.className = `toast ${type}`;
   
-  let iconHtml = '<i class="fa-solid fa-circle-check" style="color:var(--success);"></i>';
-  if (type === 'error') iconHtml = '<i class="fa-solid fa-circle-xmark" style="color:var(--danger);"></i>';
-  if (type === 'warning') iconHtml = '<i class="fa-solid fa-triangle-exclamation" style="color:var(--warning);"></i>';
+  let icon = "fa-circle-check";
+  if (type === "error") icon = "fa-circle-xmark";
+  if (type === "warning") icon = "fa-triangle-exclamation";
+  if (type === "info") icon = "fa-circle-info";
 
-  toast.innerHTML = `${iconHtml} <span>${message}</span>`;
+  toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
   container.appendChild(toast);
 
   setTimeout(() => {
@@ -117,620 +720,12 @@ function showToast(message, type = 'success') {
   }, 3000);
 }
 
-// VERIFICAÇÃO DE SESSÃO PERSISTIDA (MANTER CONECTADO / RESET DE FOLGA 24H)
-window.addEventListener('DOMContentLoaded', () => {
-  checkAndResetDayOffs();
-  const savedUser = localStorage.getItem('loggedUserRegistration') || sessionStorage.getItem('loggedUserRegistration');
-  if (savedUser) {
-    loggedUserRegistration = savedUser;
-  }
-});
-
-// RESET AUTOMÁTICO DE FOLGA APÓS 1 DIA
-async function checkAndResetDayOffs() {
-  const vanIds = ['van1', 'van2', 'van3', 'van4'];
-  const now = new Date().getTime();
-  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-
-  for (const id of vanIds) {
-    const vanRef = doc(db, "vans", id);
-    const snap = await getDoc(vanRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      let updated = false;
-      if (data.collaborators) {
-        data.collaborators = data.collaborators.map(c => {
-          if (c.onLeave && c.leaveTimestamp && (now - c.leaveTimestamp > ONE_DAY_MS)) {
-            updated = true;
-            return { ...c, onLeave: false, leaveTimestamp: null };
-          }
-          return c;
-        });
-        if (updated) {
-          await setDoc(vanRef, data);
-        }
-      }
-    }
-  }
+function escapeHtml(text) {
+  if (!text) return "";
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
-
-// TOGGLE MODO ESCURO
-themeToggleBtn.addEventListener('click', () => {
-  document.body.classList.toggle('dark-mode');
-  if (document.body.classList.contains('dark-mode')) {
-    themeIcon.classList.remove('fa-moon');
-    themeIcon.classList.add('fa-sun');
-    localStorage.setItem('theme', 'dark');
-  } else {
-    themeIcon.classList.remove('fa-sun');
-    themeIcon.classList.add('fa-moon');
-    localStorage.setItem('theme', 'light');
-  }
-});
-
-if (localStorage.getItem('theme') === 'dark') {
-  document.body.classList.add('dark-mode');
-  themeIcon.classList.remove('fa-moon');
-  themeIcon.classList.add('fa-sun');
-}
-
-// MOSTRAR / OCULTAR SENHA ADMIN
-togglePassVisibilityBtn.addEventListener('click', () => {
-  if (authPasswordInput.type === 'password') {
-    authPasswordInput.type = 'text';
-    eyeIcon.classList.remove('fa-eye');
-    eyeIcon.classList.add('fa-eye-slash');
-  } else {
-    authPasswordInput.type = 'password';
-    eyeIcon.classList.remove('fa-eye-slash');
-    eyeIcon.classList.add('fa-eye');
-  }
-});
-
-// CONTROLADORES DO MENU LATERAL
-function openMenu() { sideMenu.classList.add('open'); overlay.classList.add('active'); }
-function closeMenu() { sideMenu.classList.remove('open'); overlay.classList.remove('active'); }
-
-hamburgerBtn.addEventListener('click', openMenu);
-closeMenuBtn.addEventListener('click', closeMenu);
-overlay.addEventListener('click', closeMenu);
-
-exitBtn.addEventListener('click', () => {
-  if (confirm("Deseja realmente encerrar a aplicação?")) {
-    window.close();
-    document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#222;color:#fff;font-family:sans-serif;text-align:center;"><h2>Aplicação encerrada. Você pode fechar esta aba.</h2></div>';
-  }
-});
-
-backHomeBtn.addEventListener('click', () => {
-  if (unsubscribeVanListener) unsubscribeVanListener();
-  vanManagement.classList.add('hidden');
-  homeView.classList.remove('hidden');
-  currentVanId = null;
-  resetCollabForm();
-});
-
-// HOVER DE ROTAS
-vanButtons.forEach(btn => {
-  btn.addEventListener('mouseenter', () => {
-    const routeText = btn.getAttribute('data-route');
-    routeTooltip.innerText = `Rota: ${routeText}`;
-    routeTooltip.classList.remove('hidden');
-  });
-
-  btn.addEventListener('mousemove', (e) => {
-    routeTooltip.style.top = `${e.pageY + 10}px`;
-    routeTooltip.style.left = `${e.pageX + 10}px`;
-  });
-
-  btn.addEventListener('mouseleave', () => { routeTooltip.classList.add('hidden'); });
-
-  let clickTimer = null;
-  btn.addEventListener('click', () => {
-    if (clickTimer === null) {
-      clickTimer = setTimeout(() => {
-        clickTimer = null;
-        handleVanAccess(btn.getAttribute('data-id'), btn.innerText);
-        closeMenu();
-      }, 250);
-    }
-  });
-
-  btn.addEventListener('dblclick', () => {
-    clearTimeout(clickTimer);
-    clickTimer = null;
-    openOccupantsModal(btn.getAttribute('data-id'), btn.innerText);
-    closeMenu();
-  });
-});
-
-// ACESSO À VAN
-function handleVanAccess(vanId, vanTitle) {
-  if (isAuthenticatedForEdit) {
-    selectVan(vanId, vanTitle);
-  } else {
-    pendingVanId = vanId;
-    pendingVanTitle = vanTitle;
-    authPasswordInput.value = '';
-    authPasswordInput.type = 'password';
-    eyeIcon.className = 'fa-solid fa-eye';
-    passwordModal.classList.remove('hidden');
-    authPasswordInput.focus();
-  }
-}
-
-confirmAuthBtn.addEventListener('click', () => {
-  const password = authPasswordInput.value;
-  if (password === "admin123") {
-    isAuthenticatedForEdit = true;
-    showToast("Acesso administrativo autorizado!", "success");
-    passwordModal.classList.add('hidden');
-    selectVan(pendingVanId, pendingVanTitle);
-  } else {
-    showToast("Senha incorreta!", "error");
-    authPasswordInput.value = '';
-    authPasswordInput.focus();
-  }
-});
-
-authPasswordInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') confirmAuthBtn.click();
-});
-
-const closePasswordModal = () => {
-  passwordModal.classList.add('hidden');
-  showToast("Abrindo dados apenas para visualização.", "warning");
-  isAuthenticatedForEdit = false;
-  selectVan(pendingVanId, pendingVanTitle);
-};
-
-cancelAuthBtn.addEventListener('click', closePasswordModal);
-closePassModalBtn.addEventListener('click', closePasswordModal);
-
-// LOGIN DE USUÁRIO / MATRÍCULA
-userLoginTriggerBtn.addEventListener('click', () => {
-  if (loggedUserRegistration) {
-    openUserPanel();
-  } else {
-    loginRegistrationInput.value = '';
-    loginPasswordInput.value = '';
-    rememberMeCheckbox.checked = false;
-    userAuthModal.classList.remove('hidden');
-  }
-});
-
-closeUserAuthBtn.addEventListener('click', () => userAuthModal.classList.add('hidden'));
-
-userAuthForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const reg = loginRegistrationInput.value.trim();
-  const pass = loginPasswordInput.value.trim();
-
-  // Busca o usuário em todas as vans
-  let foundCollab = null;
-  let foundVanId = null;
-  const vanIds = ['van1', 'van2', 'van3', 'van4'];
-
-  for (const id of vanIds) {
-    const snap = await getDoc(doc(db, "vans", id));
-    if (snap.exists()) {
-      const data = snap.data();
-      const match = (data.collaborators || []).find(c => c.registration === reg);
-      if (match) {
-        foundCollab = match;
-        foundVanId = id;
-        break;
-      }
-    }
-  }
-
-  if (!foundCollab) {
-    showToast("Matrícula não encontrada em nenhuma van. Cadastre-se primeiro via Administrador.", "error");
-    return;
-  }
-
-  // Se não tem senha cadastrada, cadastra agora
-  if (!foundCollab.password) {
-    await updateCollabPassword(foundVanId, reg, pass);
-    showToast("Senha cadastrada com sucesso!", "success");
-  } else if (foundCollab.password !== pass) {
-    showToast("Senha incorreta!", "error");
-    return;
-  } else {
-    showToast("Login efetuado com sucesso!", "success");
-  }
-
-  loggedUserRegistration = reg;
-  if (rememberMeCheckbox.checked) {
-    localStorage.setItem('loggedUserRegistration', reg);
-  } else {
-    sessionStorage.setItem('loggedUserRegistration', reg);
-  }
-
-  userAuthModal.classList.add('hidden');
-  openUserPanel();
-});
-
-// ESQUECEU SENHA / REDEFINIR
-forgotPasswordBtn.addEventListener('click', async () => {
-  const reg = loginRegistrationInput.value.trim();
-  const newPass = loginPasswordInput.value.trim();
-  if (!reg || !newPass) {
-    showToast("Insira a matrícula e a nova senha desejada nos campos acima.", "warning");
-    return;
-  }
-
-  let foundVanId = null;
-  const vanIds = ['van1', 'van2', 'van3', 'van4'];
-  for (const id of vanIds) {
-    const snap = await getDoc(doc(db, "vans", id));
-    if (snap.exists() && (snap.data().collaborators || []).some(c => c.registration === reg)) {
-      foundVanId = id;
-      break;
-    }
-  }
-
-  if (!foundVanId) {
-    showToast("Matrícula não encontrada.", "error");
-    return;
-  }
-
-  await updateCollabPassword(foundVanId, reg, newPass);
-  showToast("Nova senha cadastrada com sucesso!", "success");
-});
-
-async function updateCollabPassword(vanId, reg, newPass) {
-  const vanRef = doc(db, "vans", vanId);
-  const snap = await getDoc(vanRef);
-  if (snap.exists()) {
-    const data = snap.data();
-    data.collaborators = data.collaborators.map(c => c.registration === reg ? { ...c, password: newPass } : c);
-    await setDoc(vanRef, data);
-  }
-}
-
-// PAINEL DE STATUS DA FROTA (TEMPO REAL)
-closeUserPanelBtn.addEventListener('click', () => userPanelModal.classList.add('hidden'));
-logoutUserBtn.addEventListener('click', () => {
-  loggedUserRegistration = null;
-  localStorage.removeItem('loggedUserRegistration');
-  sessionStorage.removeItem('loggedUserRegistration');
-  userPanelModal.classList.add('hidden');
-  showToast("Sessão encerrada.", "warning");
-});
-
-async function openUserPanel() {
-  userPanelModal.classList.remove('hidden');
-  renderFleetStatusTable();
-}
-
-async function renderFleetStatusTable() {
-  fleetStatusList.innerHTML = '';
-  const vanIds = [
-    { id: 'van1', name: '1. VAN ZONA NORTE L.E' },
-    { id: 'van2', name: '2. VAN ZONA NORTE L.D' },
-    { id: 'van3', name: '3. VAN ALVORADA CIMA' },
-    { id: 'van4', name: '4. VAN ALVORADA BAIXO' }
-  ];
-
-  for (const v of vanIds) {
-    const snap = await getDoc(doc(db, "vans", v.id));
-    if (snap.exists()) {
-      const data = snap.data();
-      (data.collaborators || []).forEach(c => {
-        const tr = document.createElement('tr');
-        const isMe = c.registration === loggedUserRegistration;
-        
-        let actionHtml = '';
-        if (isMe || isAuthenticatedForEdit) {
-          const btnText = c.onLeave ? 'Em Folga (Alterar)' : 'Trabalhando (Folga?)';
-          const btnClass = c.onLeave ? 'badge badge-full' : 'badge badge-available';
-          actionHtml = `<button class="btn secondary-btn toggle-leave-btn" data-van="${v.id}" data-reg="${c.registration}" style="padding:4px 8px; font-size:0.8rem;"><span class="${btnClass}">${btnText}</span></button>`;
-        } else {
-          actionHtml = c.onLeave ? '<span class="badge badge-full">Em Folga</span>' : '<span class="badge badge-available">Trabalhando</span>';
-        }
-
-        tr.innerHTML = `
-          <td>${c.name} ${isMe ? '<strong>(Você)</strong>' : ''}</td>
-          <td>${c.registration}</td>
-          <td>${v.name}</td>
-          <td>${c.sector}</td>
-          <td>${actionHtml}</td>
-        `;
-        fleetStatusList.appendChild(tr);
-      });
-    }
-  }
-
-  document.querySelectorAll('.toggle-leave-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const vId = e.currentTarget.getAttribute('data-van');
-      const reg = e.currentTarget.getAttribute('data-reg');
-      await toggleCollabLeaveStatus(vId, reg);
-      renderFleetStatusTable();
-      if (currentVanId === vId) {
-        // Atualiza a tabela interna se estiver na tela da van
-        const vanSnap = await getDoc(doc(db, "vans", vId));
-        if (vanSnap.exists()) {
-          currentVanData = vanSnap.data();
-          renderCollaboratorsTable();
-        }
-      }
-    });
-  });
-}
-
-async function toggleCollabLeaveStatus(vanId, reg) {
-  const vanRef = doc(db, "vans", vanId);
-  const snap = await getDoc(vanRef);
-  if (snap.exists()) {
-    const data = snap.data();
-    data.collaborators = data.collaborators.map(c => {
-      if (c.registration === reg) {
-        const newOnLeave = !c.onLeave;
-        return {
-          ...c,
-          onLeave: newOnLeave,
-          leaveTimestamp: newOnLeave ? new Date().getTime() : null
-        };
-      }
-      return c;
-    });
-    await setDoc(vanRef, data);
-    showToast("Status de folga atualizado com sucesso!", "success");
-  }
-}
-
-// SELECIONAR VAN E ESCUTAR MUDANÇAS EM TEMPO REAL
-async function selectVan(vanId, vanTitle) {
-  currentVanId = vanId;
-  currentVanTitle.innerText = vanTitle;
-  
-  driverNameInput.value = '';
-  maxCapacityInput.value = 16;
-  currentVanData = { driver: '', capacity: 16, collaborators: [] };
-
-  homeView.classList.add('hidden');
-  vanManagement.classList.remove('hidden');
-
-  if (unsubscribeVanListener) unsubscribeVanListener();
-
-  // OUVINTE EM TEMPO REAL (FIREBASE SNAPSHOT)
-  unsubscribeVanListener = onSnapshot(doc(db, "vans", vanId), (docSnap) => {
-    if (docSnap.exists()) {
-      currentVanData = docSnap.data();
-      driverNameInput.value = currentVanData.driver || '';
-      maxCapacityInput.value = currentVanData.capacity || 16;
-      renderCollaboratorsTable();
-      updateCapacityBadge();
-    }
-  });
-
-  if (isAuthenticatedForEdit) {
-    driverNameInput.removeAttribute('disabled');
-    maxCapacityInput.removeAttribute('disabled');
-    collabSectionCard.style.display = 'block';
-    saveAllBtn.style.display = 'block';
-  } else {
-    driverNameInput.setAttribute('disabled', 'true');
-    maxCapacityInput.setAttribute('disabled', 'true');
-    collabSectionCard.style.display = 'none';
-    saveAllBtn.style.display = 'none';
-  }
-}
-
-maxCapacityInput.addEventListener('input', updateCapacityBadge);
-
-function updateCapacityBadge() {
-  const count = currentVanData.collaborators.length;
-  const cap = parseInt(maxCapacityInput.value) || 16;
-  const vagas = cap - count;
-  const percent = Math.min(Math.round((count / cap) * 100), 100);
-
-  progressBarFill.style.width = `${percent}%`;
-  progressText.innerText = `${count} / ${cap} vagas preenchidas`;
-
-  if (count >= cap) {
-    capacityBadge.innerText = "Lotada";
-    capacityBadge.className = "badge badge-full";
-    progressBarFill.style.backgroundColor = "var(--danger)";
-  } else if (vagas <= 3) {
-    capacityBadge.innerText = `${vagas} vaga${vagas > 1 ? 's' : ''}`;
-    capacityBadge.className = "badge badge-warning";
-    progressBarFill.style.backgroundColor = "var(--warning)";
-  } else {
-    capacityBadge.innerText = `${vagas} vaga${vagas > 1 ? 's' : ''}`;
-    capacityBadge.className = "badge badge-available";
-    progressBarFill.style.backgroundColor = "var(--success)";
-  }
-
-  occupantsCounterText.innerText = `Ocupantes cadastrados: ${count} de ${cap}`;
-}
-
-// RENDERIZAR TABELA DE COLABORADORES NA TELA DA VAN
-function renderCollaboratorsTable() {
-  collabList.innerHTML = '';
-  currentVanData.collaborators.forEach((c, index) => {
-    const tr = document.createElement('tr');
-    
-    let actionsHtml = '';
-    if (isAuthenticatedForEdit) {
-      actionsHtml = `
-        <button class="icon-btn edit-collab" style="color:#2980b9;" data-index="${index}" title="Editar"><i class="fa-solid fa-pen"></i></button>
-        <button class="icon-btn delete-collab" style="color:#c0392b;" data-index="${index}" title="Excluir"><i class="fa-solid fa-trash"></i></button>
-      `;
-    } else {
-      actionsHtml = `<span style="font-size:0.8rem; color:#888;">Somente leitura</span>`;
-    }
-
-    const leaveStatusHtml = c.onLeave ? '<span class="badge badge-full">Em Folga</span>' : '<span class="badge badge-available">Trabalhando</span>';
-
-    tr.innerHTML = `
-      <td>${c.name}</td>
-      <td>${c.registration || '--'}</td>
-      <td>${c.sector}</td>
-      <td>${c.address || '--'}</td>
-      <td>${leaveStatusHtml}</td>
-      <td>${actionsHtml}</td>
-    `;
-    collabList.appendChild(tr);
-  });
-
-  if (isAuthenticatedForEdit) {
-    document.querySelectorAll('.edit-collab').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const idx = e.currentTarget.getAttribute('data-index');
-        const item = currentVanData.collaborators[idx];
-        collabIdInput.value = idx;
-        collabNameInput.value = item.name;
-        collabRegistrationInput.value = item.registration || '';
-        collabSectorInput.value = item.sector;
-        collabAddressInput.value = item.address || '';
-        cancelEditBtn.classList.remove('hidden');
-        collabNameInput.focus();
-      });
-    });
-
-    document.querySelectorAll('.delete-collab').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const idx = e.currentTarget.getAttribute('data-index');
-        currentVanData.collaborators.splice(idx, 1);
-        await saveVanToFirebase();
-        showToast("Colaborador removido.", "warning");
-      });
-    });
-  }
-}
-
-// FORMULÁRIO DE CADASTRO DE COLABORADOR
-collabForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const name = collabNameInput.value.trim();
-  const registration = collabRegistrationInput.value.trim();
-  const sector = collabSectorInput.value.trim();
-  const address = collabAddressInput.value.trim();
-  const editIndex = collabIdInput.value;
-  const cap = parseInt(maxCapacityInput.value) || 16;
-
-  if (editIndex === '' && currentVanData.collaborators.length >= cap) {
-    showToast("A capacidade máxima da van foi atingida!", "error");
-    return;
-  }
-
-  if (editIndex !== '') {
-    const existingPass = currentVanData.collaborators[editIndex].password;
-    const existingLeave = currentVanData.collaborators[editIndex].onLeave;
-    const existingTimestamp = currentVanData.collaborators[editIndex].leaveTimestamp;
-    currentVanData.collaborators[editIndex] = { 
-      name, registration, sector, address, 
-      password: existingPass, onLeave: existingLeave, leaveTimestamp: existingTimestamp 
-    };
-    showToast("Colaborador atualizado com sucesso!");
-  } else {
-    currentVanData.collaborators.push({ 
-      name, registration, sector, address, 
-      password: null, onLeave: false, leaveTimestamp: null 
-    });
-    showToast("Colaborador adicionado com sucesso!");
-  }
-
-  resetCollabForm();
-  await saveVanToFirebase();
-});
-
-function resetCollabForm() {
-  collabIdInput.value = '';
-  collabNameInput.value = '';
-  collabRegistrationInput.value = '';
-  collabSectorInput.value = '';
-  collabAddressInput.value = '';
-  cancelEditBtn.classList.add('hidden');
-}
-
-cancelEditBtn.addEventListener('click', resetCollabForm);
-
-async function saveVanToFirebase() {
-  if (!currentVanId) return;
-  currentVanData.driver = driverNameInput.value.trim();
-  currentVanData.capacity = parseInt(maxCapacityInput.value) || 16;
-
-  try {
-    await setDoc(doc(db, "vans", currentVanId), currentVanData);
-    showToast("Alterações sincronizadas com sucesso!", "success");
-  } catch (error) {
-    console.error("Erro ao salvar:", error);
-    showToast("Erro ao sincronizar com o banco de dados.", "error");
-  }
-}
-
-saveAllBtn.addEventListener('click', async () => {
-  await saveVanToFirebase();
-  if (unsubscribeVanListener) unsubscribeVanListener();
-  vanManagement.classList.add('hidden');
-  homeView.classList.remove('hidden');
-  currentVanId = null;
-  resetCollabForm();
-});
-
-// MODAL DUPLO CLIQUE (RESUMO)
-async function openOccupantsModal(vanId, vanTitle) {
-  let vanData = { driver: '', capacity: 16, collaborators: [] };
-
-  try {
-    const vanDoc = await getDoc(doc(db, "vans", vanId));
-    if (vanDoc.exists()) vanData = vanDoc.data();
-  } catch (err) {
-    if (vanId === currentVanId) vanData = currentVanData;
-  }
-
-  document.getElementById('modal-van-title').innerText = vanTitle;
-  document.getElementById('modal-driver-name').innerText = vanData.driver || 'Não cadastrado';
-  document.getElementById('modal-capacity').innerText = vanData.capacity || 16;
-  document.getElementById('modal-count').innerText = vanData.collaborators.length;
-
-  const count = vanData.collaborators.length;
-  const cap = vanData.capacity || 16;
-  const statusBadge = document.getElementById('modal-status-badge');
-
-  if (count >= cap) {
-    statusBadge.innerText = "Lotada";
-    statusBadge.className = "badge badge-full";
-  } else {
-    const vagas = cap - count;
-    statusBadge.innerText = `${vagas} vaga${vagas > 1 ? 's' : ''}`;
-    statusBadge.className = "badge badge-available";
-  }
-
-  const occupantsList = document.getElementById('modal-occupants-list');
-  occupantsList.innerHTML = '';
-
-  if (vanData.collaborators.length === 0) {
-    occupantsList.innerHTML = '<li>Nenhum colaborador cadastrado nesta van.</li>';
-  } else {
-    vanData.collaborators.forEach(collab => {
-      const li = document.createElement('li');
-      const leaveText = collab.onLeave ? ' <span style="color:var(--danger);">(Folga)</span>' : '';
-      li.innerHTML = `<strong>${collab.name}</strong> (${collab.registration || 'S/N'}) — <span style="color:var(--secondary);">${collab.sector}</span> | <em>${collab.address || 'Sem endereço'}</em>${leaveText}`;
-      occupantsList.appendChild(li);
-    });
-  }
-
-  occupantsModal.classList.remove('hidden');
-}
-
-aboutBtn.addEventListener('click', () => {
-  aboutModal.classList.remove('hidden');
-  closeMenu();
-});
-
-closeModalBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    aboutModal.classList.add('hidden');
-    occupantsModal.classList.add('hidden');
-  });
-});
-
-document.getElementById('terms-link').addEventListener('click', (e) => {
-  e.preventDefault();
-  alert("Termos de Uso: Sistema de uso interno reservado para gestão de transporte e controle de rotas das vans do Bourbon Country.");
-});
