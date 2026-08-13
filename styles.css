@@ -528,21 +528,29 @@ select:focus {
   box-shadow: 0 0 0 2px rgba(139, 0, 0, 0.15);
 }
 
-#fleet-status-list {
-  display: flex;
-  flex-direction: row;    /* Padrão horizontal (carrossel) */
-  overflow-x: auto;       /* Rolagem horizontal ativada */
-  overflow-y: hidden;
-  gap: 15px;
-  padding: 10px 5px 20px 5px;
-  width: 100%;
-  scroll-snap-type: x mandatory; /* Deixa o movimento de arrastar suave e travado por card */
+/* PAINEL DO MODAL AMPLIADO PARA A FROTA */
+#user-panel-modal .modal-content {
+  max-width: 95vw !important; /* Permite que o modal ocupe quase toda a largura da tela */
+  width: 1100px;
 }
 
+/* ESTILIZAÇÃO DO PAINEL DE STATUS DA FROTA COM ROLAGEM HORIZONTAL */
+#fleet-status-list {
+  display: flex;
+  flex-direction: row;    /* Organiza os cards das vans lado a lado */
+  overflow-x: auto;       /* Ativa a barra de rolagem horizontal */
+  overflow-y: hidden;
+  gap: 20px;
+  padding: 15px 5px 25px 5px;
+  width: 100%;
+  scroll-snap-type: x mandatory; /* Efeito suave de encaixe ao rolar os cards */
+}
+
+/* Garante tamanho ideal fixo para os cards deslizarem horizontalmente */
 #fleet-status-list .card, 
 #fleet-status-list .van-status-card {
-  flex: 0 0 300px;        /* Tamanho ideal para deslizar horizontalmente */
-  max-width: 300px;
+  flex: 0 0 320px;        /* Cada card terá exatamente 320px de largura */
+  max-width: 320px;
   scroll-snap-align: start;
   margin-bottom: 0;
 }
