@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
+/*
 // CONFIGURAÇÃO DO FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyBAd6FjJyipmiWRnmMUzc353XMyCT9ldc",
@@ -25,7 +25,7 @@ let currentVanData = {
 
 let isAuthenticatedForEdit = false;
 let unsubscribeVanListener = null;
-
+*/
 // ELEMENTOS DOM
 const hamburgerBtn = document.getElementById('hamburger-btn');
 const sideMenu = document.getElementById('side-menu');
