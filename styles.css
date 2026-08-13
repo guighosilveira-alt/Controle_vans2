@@ -527,3 +527,22 @@ select:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px rgba(139, 0, 0, 0.15);
 }
+
+/* ESTILIZAÇÃO DO PAINEL DE STATUS DA FROTA (#fleet-status-list) */
+#fleet-status-list {
+  max-height: 65vh;       /* Limita a altura para habilitar a rolagem vertical */
+  overflow-y: auto;       /* Ativa a barra de rolagem externa quando necessário */
+  padding-right: 5px;     /* Espaçamento para a barra de rolagem */
+  display: flex;
+  flex-direction: column;
+  align-items: center;    /* Centraliza horizontalmente os blocos/cards internos */
+  gap: 15px;              /* Espaçamento entre os cards das vans */
+}
+
+/* Garante que os cards internos dentro do painel da frota ocupem um tamanho harmônico e centralizado */
+#fleet-status-list .card, 
+#fleet-status-list .van-status-card {
+  width: 100%;
+  max-width: 600px;
+  margin-bottom: 0;       /* O gap do flexbox já gerencia o espaçamento */
+}
