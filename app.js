@@ -1,17 +1,17 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-/*
-// CONFIGURAÇÃO DO FIREBASE
+
+// CONFIGURAÇÃO DO FIREBASE (NOVO PROJETO)
 const firebaseConfig = {
-  apiKey: "AIzaSyBAd6FjJyipmiWRnmMUzc353XMyCT9ldc",
-  authDomain: "controle-vans-bourbon.firebaseapp.com",
-  projectId: "controle-vans-bourbon",
-  storageBucket: "controle-vans-bourbon.firebasestorage.app",
-  messagingSenderId: "859690609728",
-  appId: "1:859690609728:web:a407eae7447b869c7243a5"
+  apiKey: "AIzaSyAdsFHnwDSSUXvNPLWy5zRLXQNoMeH582E",
+  authDomain: "controle-vans-bourbon2.firebaseapp.com",
+  projectId: "controle-vans-bourbon2",
+  storageBucket: "controle-vans-bourbon2.firebasestorage.app",
+  messagingSenderId: "266501330110",
+  appId: "1:266501330110:web:f8868bb865a82ad6cffaef"
 };
 
-// Inicializa Firebase
+// Inicializa Firebase e Firestore
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
@@ -25,7 +25,8 @@ let currentVanData = {
 
 let isAuthenticatedForEdit = false;
 let unsubscribeVanListener = null;
-*/
+
+
 // ELEMENTOS DOM
 const hamburgerBtn = document.getElementById('hamburger-btn');
 const sideMenu = document.getElementById('side-menu');
