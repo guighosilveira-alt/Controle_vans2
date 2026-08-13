@@ -599,6 +599,8 @@ async function checkAutoLogin() {
 // ==========================================
 // PAINEL E LOGIN DO COLABORADOR
 // ==========================================
+let unsubscribeUserPanelListener = null;
+
 async function openUserPanel() {
   const panelModal = document.getElementById("user-panel-modal");
   const fleetList = document.getElementById("fleet-status-list");
@@ -617,107 +619,117 @@ async function openUserPanel() {
     { id: 'van4', name: '4. Alvorada Baixo' }
   ];
 
-  // 1. Descobrir a qual van o usuário logado pertence
-  let userVanId = null;
-  let userVanName = '';
-  let collaborators = [];
+  // Cancela listener anterior se houver para evitar duplicação
+  if (unsubscribeUserPanelListener) {
+    unsubscribeUserPanelListener();
+    unsubscribeUserPanelListener = null;
+  }
 
+  // 1. Descobrir primeiro a qual van o usuário logado pertence
+  let userVanId = null;
   for (const v of vanConfigs) {
     const vRef = doc(db, "vans", v.id);
     const vSnap = await getDoc(vRef);
     if (vSnap.exists()) {
       const data = vSnap.data();
-      if (data.collaborators) {
-        const found = data.collaborators.some(c => c.registration === loggedUserRegistration);
-        if (found) {
-          userVanId = v.id;
-          userVanName = v.name;
-          collaborators = data.collaborators;
-          break;
-        }
+      if (data.collaborators && data.collaborators.some(c => c.registration === loggedUserRegistration)) {
+        userVanId = v.id;
+        break;
       }
     }
   }
-
-  fleetList.innerHTML = "";
 
   if (!userVanId) {
     fleetList.innerHTML = `<div style='text-align: center; padding: 20px; color: var(--danger);'>Matrícula não encontrada em nenhuma van.</div>`;
     return;
   }
 
-  const vanSection = document.createElement("div");
-  vanSection.className = "van-panel-group";
-  vanSection.style.cssText = "margin-bottom: 20px; background: var(--bg-card); border-radius: 8px; padding: 12px; box-shadow: var(--shadow-sm); border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: center;";
+  // 2. Escutar em tempo real a van específica do usuário
+  const targetVanRef = doc(db, "vans", userVanId);
+  const targetVanMeta = vanConfigs.find(v => v.id === userVanId);
 
-  let rowsHtml = "";
-  if (collaborators.length === 0) {
-    rowsHtml = `<div style="text-align: center; color: var(--secondary); font-size: 0.9rem; padding: 8px;">Nenhum colaborador nesta van.</div>`;
-  } else {
-    rowsHtml = `<div class="table-responsive" style="max-height: 220px; overflow-y: auto; overflow-x: auto;">
-      <table class="data-table" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
-            <th style="text-align: left; padding: 8px;">Colaborador</th>
-            <th style="text-align: left; padding: 8px;">Matrícula</th>
-            <th style="text-align: left; padding: 8px;">Setor</th>
-            <th style="text-align: center; padding: 8px;">Ação</th>
-          </tr>
-        </thead>
-        <tbody>`;
+  unsubscribeUserPanelListener = onSnapshot(targetVanRef, (docSnap) => {
+    if (!docSnap.exists()) return;
+    const data = docSnap.data();
+    const collaborators = data.collaborators || [];
 
-    collaborators.forEach((c, idx) => {
-      const isMe = c.registration === loggedUserRegistration;
-      const isOff = c.isOff || false;
-      
-      rowsHtml += `
-        <tr style="${isMe ? 'background-color: rgba(139, 0, 0, 0.12); font-weight: bold;' : ''}">
-          <td style="padding: 8px;">${escapeHtml(c.name)} ${isMe ? '<span style="color:var(--danger);">(Você)</span>' : ''}</td>
-          <td style="padding: 8px;">${escapeHtml(c.registration)}</td>
-          <td style="padding: 8px;">${escapeHtml(c.sector)}</td>
-          <td style="text-align: center; padding: 8px;">
-            <button class="btn ${isOff ? 'warning-btn' : 'success-btn'} toggle-status-btn" 
-              data-van="${userVanId}" 
-              data-index="${idx}" 
-              style="padding: 4px 10px; font-size: 0.8rem; ${!isMe ? 'opacity: 0.6; cursor: not-allowed;' : 'cursor: pointer;'}"
-              ${!isMe ? 'disabled' : ''}>
-              ${isOff ? 'Folga' : 'Trabalhando'}
-            </button>
-          </td>
-        </tr>`;
-    });
+    fleetList.innerHTML = "";
 
-    rowsHtml += `</tbody></table></div>`;
-  }
+    const vanSection = document.createElement("div");
+    vanSection.className = "van-panel-group";
+    vanSection.style.cssText = "margin-bottom: 20px; background: var(--bg-card); border-radius: 8px; padding: 12px; box-shadow: var(--shadow-sm); border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: center;";
 
-  vanSection.innerHTML = `
-    <h3 style="margin-bottom: 10px; font-size: 1rem; color: var(--primary); border-bottom: 2px solid var(--border-color); padding-bottom: 5px;">
-      <i class="fa-solid van-icon"></i> ${userVanName} (${collaborators.filter(c => !c.isOff).length}/${collaborators.length} ativos)
-    </h3>
-    ${rowsHtml}
-  `;
+    let rowsHtml = "";
+    if (collaborators.length === 0) {
+      rowsHtml = `<div style="text-align: center; color: var(--secondary); font-size: 0.9rem; padding: 8px;">Nenhum colaborador nesta van.</div>`;
+    } else {
+      rowsHtml = `<div class="table-responsive" style="max-height: 220px; overflow-y: auto; overflow-x: auto;">
+        <table class="data-table" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
+              <th style="text-align: left; padding: 8px;">Colaborador</th>
+              <th style="text-align: left; padding: 8px;">Matrícula</th>
+              <th style="text-align: left; padding: 8px;">Setor</th>
+              <th style="text-align: center; padding: 8px;">Ação</th>
+            </tr>
+          </thead>
+          <tbody>`;
 
-  fleetList.appendChild(vanSection);
+      collaborators.forEach((c, idx) => {
+        const isMe = c.registration === loggedUserRegistration;
+        const isOff = c.isOff || false;
+        
+        rowsHtml += `
+          <tr style="${isMe ? 'background-color: rgba(139, 0, 0, 0.12); font-weight: bold;' : ''}">
+            <td style="padding: 8px;">${escapeHtml(c.name)} ${isMe ? '<span style="color:var(--danger);">(Você)</span>' : ''}</td>
+            <td style="padding: 8px;">${escapeHtml(c.registration)}</td>
+            <td style="padding: 8px;">${escapeHtml(c.sector)}</td>
+            <td style="text-align: center; padding: 8px;">
+              <button class="btn ${isOff ? 'warning-btn' : 'success-btn'} toggle-status-btn" 
+                data-van="${userVanId}" 
+                data-index="${idx}" 
+                style="padding: 4px 10px; font-size: 0.8rem; ${!isMe ? 'opacity: 0.6; cursor: not-allowed;' : 'cursor: pointer;'}"
+                ${!isMe ? 'disabled' : ''}>
+                ${isOff ? 'Folga' : 'Trabalhando'}
+              </button>
+            </td>
+          </tr>`;
+      });
 
-  document.querySelectorAll(".toggle-status-btn").forEach(btn => {
-    btn.addEventListener("click", async (e) => {
-      const vId = e.currentTarget.getAttribute("data-van");
-      const cIdx = parseInt(e.currentTarget.getAttribute("data-index"));
+      rowsHtml += `</tbody></table></div>`;
+    }
 
-      const vRef = doc(db, "vans", vId);
-      const vSnap = await getDoc(vRef);
-      if (vSnap.exists()) {
-        const vData = vSnap.data();
-        if (vData.collaborators && vData.collaborators[cIdx]) {
-          const currentStatus = vData.collaborators[cIdx].isOff || false;
-          vData.collaborators[cIdx].isOff = !currentStatus;
+    vanSection.innerHTML = `
+      <h3 style="margin-bottom: 10px; font-size: 1rem; color: var(--primary); border-bottom: 2px solid var(--border-color); padding-bottom: 5px;">
+        <i class="fa-solid van-icon"></i> ${targetVanMeta.name} (${collaborators.filter(c => !c.isOff).length}/${collaborators.length} ativos)
+      </h3>
+      ${rowsHtml}
+    `;
 
-          await setDoc(vRef, vData);
-          showToast("Status de folga atualizado com sucesso!", "success");
-          openUserPanel();
+    fleetList.appendChild(vanSection);
+
+    // Reatribuir eventos aos botões gerados dinamicamente
+    document.querySelectorAll(".toggle-status-btn").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        const vId = e.currentTarget.getAttribute("data-van");
+        const cIdx = parseInt(e.currentTarget.getAttribute("data-index"));
+
+        const vRef = doc(db, "vans", vId);
+        const vSnap = await getDoc(vRef);
+        if (vSnap.exists()) {
+          const vData = vSnap.data();
+          if (vData.collaborators && vData.collaborators[cIdx]) {
+            const currentStatus = vData.collaborators[cIdx].isOff || false;
+            vData.collaborators[cIdx].isOff = !currentStatus;
+
+            await setDoc(vRef, vData);
+            showToast("Status de folga atualizado com sucesso!", "success");
+          }
         }
-      }
+      });
     });
+  }, (error) => {
+    console.error("Erro ao sincronizar painel do usuário:", error);
   });
 }
 
