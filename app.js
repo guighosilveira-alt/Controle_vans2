@@ -509,82 +509,17 @@ function closeAllModals() {
 // ==========================================
 // PAINEL E LOGIN DO COLABORADOR
 // ==========================================
-async function handleCollabLogin(registration, password, remember) {
-  let foundCollab = null;
-  let foundVanId = null;
-  let collabIndex = -1;
-
-  const vanIds = ['van1', 'van2', 'van3', 'van4'];
-
-  for (const vId of vanIds) {
-    const vRef = doc(db, "vans", vId);
-    const vSnap = await getDoc(vRef);
-    if (vSnap.exists()) {
-      const data = vSnap.data();
-      if (data.collaborators) {
-        const idx = data.collaborators.findIndex(c => c.registration === registration);
-        if (idx !== -1) {
-          foundCollab = data.collaborators[idx];
-          foundVanId = vId;
-          collabIndex = idx;
-          break;
-        }
-      }
-    }
-  }
-
-  if (!foundCollab) {
-    showToast("Matrícula não encontrada em nenhuma van cadastrada.", "error");
-    return;
-  }
-
-  if (!foundCollab.password) {
-    foundCollab.password = password;
-    const vRef = doc(db, "vans", foundVanId);
-    const vSnap = await getDoc(vRef);
-    const data = vSnap.data();
-    data.collaborators[collabIndex] = foundCollab;
-    await setDoc(vRef, data);
-    showToast("Senha cadastrada com sucesso!", "success");
-  } else if (foundCollab.password !== password) {
-    showToast("Senha incorreta!", "error");
-    return;
-  }
-
-  loggedUserRegistration = registration;
-  if (remember) {
-    localStorage.setItem("bourbon_logged_user", registration);
-  }
-
-  closeAllModals();
-  openUserPanel();
-  showToast(`Bem-vindo, ${foundCollab.name}!`, "success");
-}
-
-async function checkAutoLogin() {
-  const vanIds = ['van1', 'van2', 'van3', 'van4'];
-  for (const vId of vanIds) {
-    const vRef = doc(db, "vans", vId);
-    const vSnap = await getDoc(vRef);
-    if (vSnap.exists()) {
-      const data = vSnap.data();
-      if (data.collaborators && data.collaborators.some(c => c.registration === loggedUserRegistration)) {
-        return;
-      }
-    }
-  }
-  localStorage.removeItem("bourbon_logged_user");
-  loggedUserRegistration = null;
-}
-
 async function openUserPanel() {
   const panelModal = document.getElementById("user-panel-modal");
   const fleetList = document.getElementById("fleet-status-list");
-  fleetList.innerHTML = "<tr><td colspan='5' style='text-align:center;'>Carregando status da frota...</td></tr>";
+  
+  if (!fleetList) return;
+
+  fleetList.innerHTML = "<div style='text-align:center; padding: 20px; color: var(--secondary);'>Carregando status da frota...</div>";
   panelModal.classList.remove("hidden");
   document.getElementById("overlay").classList.add("active");
 
-  const vanIds = [
+  const vanConfigs = [
     { id: 'van1', name: '1. Zona Norte L.E' },
     { id: 'van2', name: '2. Zona Norte L.D' },
     { id: 'van3', name: '3. Alvorada Cima' },
@@ -592,47 +527,82 @@ async function openUserPanel() {
   ];
 
   fleetList.innerHTML = "";
-  let totalFleet = [];
+  let totalCollaboratorsCount = 0;
 
-  for (const v of vanIds) {
+  // Cria um layout em colunas/blocos separados por van para evitar travamento de rolagem
+  for (const v of vanConfigs) {
     const vRef = doc(db, "vans", v.id);
     const vSnap = await getDoc(vRef);
+    
+    let collaborators = [];
     if (vSnap.exists()) {
       const data = vSnap.data();
       if (data.collaborators) {
-        data.collaborators.forEach((c, idx) => {
-          totalFleet.push({ ...c, vanName: v.name, vanId: v.id, collabIndex: idx });
-        });
+        collaborators = data.collaborators;
+        totalCollaboratorsCount += collaborators.length;
       }
     }
+
+    const vanSection = document.createElement("div");
+    vanSection.className = "van-panel-group";
+    vanSection.style.cssText = "margin-bottom: 20px; background: var(--bg-card); border-radius: 8px; padding: 12px; box-shadow: var(--shadow-sm); border: 1px solid var(--border-color);";
+
+    let rowsHtml = "";
+    if (collaborators.length === 0) {
+      rowsHtml = `<div style="text-align: center; color: var(--secondary); font-size: 0.9rem; padding: 8px;">Nenhum colaborador nesta van.</div>`;
+    } else {
+      rowsHtml = `<div class="table-responsive" style="max-height: 220px; overflow-y: auto; overflow-x: auto;">
+        <table class="data-table" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
+              <th style="text-align: left; padding: 8px;">Colaborador</th>
+              <th style="text-align: left; padding: 8px;">Matrícula</th>
+              <th style="text-align: left; padding: 8px;">Setor</th>
+              <th style="text-align: center; padding: 8px;">Ação</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+      collaborators.forEach((c, idx) => {
+        const isMe = c.registration === loggedUserRegistration;
+        const isOff = c.isOff || false;
+        
+        rowsHtml += `
+          <tr style="${isMe ? 'background-color: rgba(139, 0, 0, 0.12); font-weight: bold;' : ''}">
+            <td style="padding: 8px;">${escapeHtml(c.name)} ${isMe ? '<span style="color:var(--danger);">(Você)</span>' : ''}</td>
+            <td style="padding: 8px;">${escapeHtml(c.registration)}</td>
+            <td style="padding: 8px;">${escapeHtml(c.sector)}</td>
+            <td style="text-align: center; padding: 8px;">
+              <button class="btn ${isOff ? 'warning-btn' : 'success-btn'} toggle-status-btn" 
+                data-van="${v.id}" 
+                data-index="${idx}" 
+                style="padding: 4px 10px; font-size: 0.8rem; ${!isMe ? 'opacity: 0.6; cursor: not-allowed;' : 'cursor: pointer;'}"
+                ${!isMe ? 'disabled' : ''}>
+                ${isOff ? 'Folga' : 'Trabalhando'}
+              </button>
+            </td>
+          </tr>`;
+      });
+
+      rowsHtml += `</tbody></table></div>`;
+    }
+
+    vanSection.innerHTML = `
+      <h3 style="margin-bottom: 10px; font-size: 1rem; color: var(--primary); border-bottom: 2px solid var(--border-color); padding-bottom: 5px;">
+        <i class="fa-solid van-icon"></i> ${v.name} (${collaborators.filter(c => !c.isOff).length}/${collaborators.length} ativos)
+      </h3>
+      ${rowsHtml}
+    `;
+
+    fleetList.appendChild(vanSection);
   }
 
-  if (totalFleet.length === 0) {
-    fleetList.innerHTML = `<tr><td colspan="5" style="text-align: center;">Nenhum colaborador na frota.</td></tr>`;
+  if (totalCollaboratorsCount === 0) {
+    fleetList.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--secondary);">Nenhum colaborador cadastrado na frota.</div>`;
     return;
   }
 
-  totalFleet.forEach(item => {
-    const isMe = item.registration === loggedUserRegistration;
-    const isOff = item.isOff || false;
-
-    const tr = document.createElement("tr");
-    if (isMe) tr.style.backgroundColor = "rgba(139, 0, 0, 0.08)";
-
-    tr.innerHTML = `
-      <td>${escapeHtml(item.name)} ${isMe ? '<strong>(Você)</strong>' : ''}</td>
-      <td>${escapeHtml(item.registration)}</td>
-      <td>${escapeHtml(item.vanName)}</td>
-      <td>${escapeHtml(item.sector)}</td>
-      <td>
-        <button class="btn ${isOff ? 'warning-btn' : 'success-btn'} toggle-status-btn" data-van="${item.vanId}" data-index="${item.collabIndex}" ${!isMe ? 'disabled style="opacity:0.7; cursor:not-allowed;"' : ''}>
-          ${isOff ? 'Folga (Mudar)' : 'Trabalhando (Mudar)'}
-        </button>
-      </td>
-    `;
-    fleetList.appendChild(tr);
-  });
-
+  // Atribui o evento de clique para alternar o status do usuário logado de forma fluida
   document.querySelectorAll(".toggle-status-btn").forEach(btn => {
     btn.addEventListener("click", async (e) => {
       const vId = e.currentTarget.getAttribute("data-van");
@@ -642,12 +612,14 @@ async function openUserPanel() {
       const vSnap = await getDoc(vRef);
       if (vSnap.exists()) {
         const vData = vSnap.data();
-        const currentStatus = vData.collaborators[cIdx].isOff || false;
-        vData.collaborators[cIdx].isOff = !currentStatus;
+        if (vData.collaborators && vData.collaborators[cIdx]) {
+          const currentStatus = vData.collaborators[cIdx].isOff || false;
+          vData.collaborators[cIdx].isOff = !currentStatus;
 
-        await setDoc(vRef, vData);
-        showToast("Status de folga atualizado com sucesso!", "success");
-        openUserPanel();
+          await setDoc(vRef, vData);
+          showToast("Status de folga atualizado com sucesso!", "success");
+          openUserPanel(); // Atualiza painel instantaneamente
+        }
       }
     });
   });
